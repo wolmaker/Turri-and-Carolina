@@ -18364,6 +18364,18 @@ index 2073d59..39d3221 100644
  #define SERVICE_TYPE "_nvstream._tcp"
  
    namespace publish {
+diff --git a/src/video.cpp b/src/video.cpp
+index 93429b7..2842075 100644
+--- a/src/video.cpp
++++ b/src/video.cpp
+@@ -821,6 +821,7 @@ namespace video {
+         {"rc"s, &config::video.amd.amd_rc_h264},
+         {"usage"s, &config::video.amd.amd_usage_h264},
+         {"vbaq"s, &config::video.amd.amd_vbaq},
++        {"coder"s, &config::video.amd.amd_coder},
+         {"enforce_hrd"s, &config::video.amd.amd_enforce_hrd},
+       },
+       {},  // SDR-specific options
 diff --git a/src_assets/common/assets/desktop.png b/src_assets/common/assets/desktop.png
 index 9219b1440f328271774e3fb3eca63b342f7b4820..b94142aa224f178aaaeb91512493ae0f6eb08476 100644
 GIT binary patch
@@ -75046,3 +75058,16 @@ index a5ae664..df4100a 100644
 +rem Stop and delete the new TurriService service
 +net stop TurriService
 +sc delete TurriService
+diff --git a/tools/sunshinesvc.cpp b/tools/sunshinesvc.cpp
+index ab3a3fa..57aa9ae 100644
+--- a/tools/sunshinesvc.cpp
++++ b/tools/sunshinesvc.cpp
+@@ -18,7 +18,7 @@ SERVICE_STATUS service_status;
+ HANDLE stop_event;
+ HANDLE session_change_event;
+ 
+-#define SERVICE_NAME "ApolloService"
++#define SERVICE_NAME "TurriService"
+ 
+ DWORD WINAPI HandlerEx(DWORD dwControl, DWORD dwEventType, LPVOID lpEventData, LPVOID lpContext) {
+   switch (dwControl) {
