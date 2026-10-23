@@ -50,7 +50,7 @@ jobs:
         run: |
           git clone https://github.com/ClassicOldSong/Apollo.git apollo
           cd apollo
-          git checkout v0.4.8
+          git checkout v0.4.6
           git submodule update --init --recursive
 
       - name: Aplicar cambios de Turri
@@ -73,8 +73,8 @@ jobs:
       - name: Compilar
         env:
           BRANCH: master
-          BUILD_VERSION: "0.4.8"
-          COMMIT: f83ac60
+          BUILD_VERSION: "0.4.6"
+          COMMIT: 0cd32ab
         run: |
           cd apollo
           node --version
