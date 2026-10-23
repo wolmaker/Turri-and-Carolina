@@ -1,4 +1,4 @@
-name: Carolina (etapa 1)
+name: Carolina
 
 on:
   workflow_dispatch:
@@ -25,10 +25,10 @@ jobs:
           git checkout c5cf27f
           git submodule update --init --recursive
 
-      - name: Aplicar cambios de Carolina
+      - name: Aplicar cambios de Carolina (carolina.patch)
         working-directory: artemis
         run: |
-          git apply --whitespace=nowarn ../repo/carolina-etapa1.patch
+          git apply --whitespace=nowarn ../repo/carolina.patch
           git status --short | head -40
 
       - name: Instalar Android NDK
