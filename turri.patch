@@ -18351,6 +18351,19 @@ index 2073d59..39d3221 100644
  #define SERVICE_TYPE "_nvstream._tcp"
  
    namespace publish {
+diff --git a/src/platform/windows/input.cpp b/src/platform/windows/input.cpp
+index 9d182c7..30c3e6a 100644
+--- a/src/platform/windows/input.cpp
++++ b/src/platform/windows/input.cpp
+@@ -23,7 +23,7 @@
+ #include "src/platform/common.h"
+ 
+ #ifdef __MINGW32__
+-DECLARE_HANDLE(HSYNTHETICPOINTERDEVICE);
++// DECLARE_HANDLE(HSYNTHETICPOINTERDEVICE);  // already declared by newer MinGW headers
+ WINUSERAPI HSYNTHETICPOINTERDEVICE WINAPI CreateSyntheticPointerDevice(POINTER_INPUT_TYPE pointerType, ULONG maxCount, POINTER_FEEDBACK_MODE mode);
+ WINUSERAPI BOOL WINAPI InjectSyntheticPointerInput(HSYNTHETICPOINTERDEVICE device, CONST POINTER_TYPE_INFO *pointerInfo, UINT32 count);
+ WINUSERAPI VOID WINAPI DestroySyntheticPointerDevice(HSYNTHETICPOINTERDEVICE device);
 diff --git a/src_assets/common/assets/desktop.png b/src_assets/common/assets/desktop.png
 index 9219b1440f328271774e3fb3eca63b342f7b4820..b94142aa224f178aaaeb91512493ae0f6eb08476 100644
 GIT binary patch
