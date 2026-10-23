@@ -59,6 +59,17 @@ jobs:
           git apply --whitespace=nowarn ../repo/turri.patch
           git status --short | head -20
 
+      - name: Agregar driver de pantalla virtual (SudoVDA) del instalador oficial de Apollo 0.4.6
+        shell: pwsh
+        run: |
+          Invoke-WebRequest "https://github.com/ClassicOldSong/Apollo/releases/download/v0.4.6/Apollo-0.4.6.exe" -OutFile apollo046.exe
+          & "C:\Program Files\7-Zip\7z.exe" x apollo046.exe -oapollo046 -y | Out-Null
+          $nef = Get-ChildItem -Recurse apollo046 -Filter nefconc.exe | Select-Object -First 1
+          if (-not $nef) { throw "No se encontro nefconc.exe en el instalador de Apollo" }
+          Get-ChildItem $nef.DirectoryName
+          Copy-Item "$($nef.DirectoryName)\*" "apollo\src_assets\windows\drivers\sudovda\" -Force
+          Get-ChildItem apollo\src_assets\windows\drivers\sudovda
+
       - name: Compilar
         env:
           BRANCH: master
