@@ -53,6 +53,24 @@ Ambos se compilan solos con **GitHub Actions** (pestaña *Actions*):
 - **Carolina**: aplica `carolina.patch` sobre Artemis y genera el APK (artefacto *Carolina-APK*). En televisores usa el **armeabi-v7a**.
 - **Turri**: aplica `turri.patch` sobre Apollo v0.4.6 y genera el instalador para Windows (artefacto *Turri-instalador*).
 
+## Apoya el proyecto
+
+Turri y Carolina son gratuitos y siempre lo serán. Si te sirvieron y quieres ayudar a que sigan mejorando, tienes dos formas de hacerlo:
+
+**💜 Apoyo mensual en Patreon** (desde 1 dólar al mes)
+
+[![Apoyar en Patreon](https://img.shields.io/badge/Apoyar-Patreon-F96854?logo=patreon&logoColor=white&style=for-the-badge)](https://www.patreon.com/c/jordan861/membership)
+
+**📚 O compra un libro de arte restaurado**
+
+Si prefieres no suscribirte, puedes apoyar comprando uno de los libros de dibujo restaurados de mi tienda. Ayudas al proyecto y te llevas un libro de arte.
+
+[![Visitar la tienda](https://img.shields.io/badge/Tienda-Libros%20de%20arte-F96854?logo=patreon&logoColor=white&style=for-the-badge)](https://www.patreon.com/c/jordan861/shop)
+
+Cualquier aporte ayuda. Gracias de corazón.
+
+Si quieres apoyar también a quienes hicieron posible la base, visita las páginas de [Apollo/Artemis](https://github.com/ClassicOldSong), [Sunshine](https://github.com/LizardByte/Sunshine) y [Moonlight](https://moonlight-stream.org).
+
 ## Créditos y licencia
 
 Turri y Carolina son trabajos derivados y se distribuyen bajo la misma licencia que sus originales, **GPL-3.0**. Todo el mérito del motor de streaming es de sus autores:
