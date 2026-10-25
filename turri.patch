@@ -19696,6 +19696,94 @@ index f6bc8fa..f8eda31 100644
      <div class="card p-2 mt-4">
          <div class="card-body">
              <h2>{{ $t('resource_card.resources') }}</h2>
+diff --git a/src_assets/common/assets/web/TurriColumns.vue b/src_assets/common/assets/web/TurriColumns.vue
+new file mode 100644
+index 0000000..29a1d1e
+--- /dev/null
++++ b/src_assets/common/assets/web/TurriColumns.vue
+@@ -0,0 +1,82 @@
++<template>
++  <!-- Turri: column menu, same idea as Carolina's in-game menu -->
++  <div class="turri-cols my-4">
++    <div class="turri-col" v-for="col in columns" :key="col.title">
++      <h3><i :class="col.icon"></i> {{ col.title }}</h3>
++      <template v-for="item in col.items" :key="item.label">
++        <a v-if="item.href" class="turri-item" :href="item.href">
++          <i :class="item.icon"></i>
++          <span>{{ item.label }}<small v-if="item.note">{{ item.note }}</small></span>
++        </a>
++        <button v-else type="button" class="turri-item" :disabled="busy" @click="item.action()">
++          <i :class="item.icon"></i>
++          <span>{{ item.label }}<small v-if="item.note">{{ item.note }}</small></span>
++        </button>
++      </template>
++    </div>
++  </div>
++  <div v-if="message" class="alert turri-msg">{{ message }}</div>
++</template>
++
++<script>
++export default {
++  data() {
++    return {
++      busy: false,
++      message: '',
++      columns: [
++        {
++          title: 'Funciones', icon: 'fas fa-gamepad',
++          items: [
++            { label: 'Vincular un dispositivo (PIN)', note: 'Para conectar Carolina por primera vez', icon: 'fas fa-link', href: './pin' },
++            { label: 'Aplicaciones y juegos', note: 'Escritorio, Steam y tus juegos', icon: 'fas fa-th-large', href: './apps' },
++            { label: 'Cerrar la app en curso', note: 'Termina lo que se está transmitiendo', icon: 'fas fa-stop-circle', action: () => this.post('./api/apps/close', '¿Cerrar la aplicación que se está transmitiendo?', 'Aplicación cerrada.') },
++            { label: 'Reiniciar Turri', note: 'Si algo no responde', icon: 'fas fa-redo', action: () => this.post('./api/restart', '¿Reiniciar Turri? Se cortará cualquier transmisión.', 'Turri se está reiniciando… recarga la página en unos segundos.') },
++          ]
++        },
++        {
++          title: 'Video y audio', icon: 'fas fa-tv',
++          items: [
++            { label: 'Pantalla y audio', note: 'Monitor, pantalla virtual, sonido', icon: 'fas fa-desktop', href: './config#av' },
++            { label: 'Codificador AMD', note: 'Calidad y velocidad (RX 580)', icon: 'fas fa-microchip', href: './config#amd' },
++            { label: 'Codificador por software', note: 'Si la tarjeta de video falla', icon: 'fas fa-cogs', href: './config#sw' },
++          ]
++        },
++        {
++          title: 'Teclado y mouse', icon: 'fas fa-keyboard',
++          items: [
++            { label: 'Mando, teclado y mouse', note: 'Cómo llegan los controles a la PC', icon: 'fas fa-mouse', href: './config#input' },
++          ]
++        },
++        {
++          title: 'Red', icon: 'fas fa-network-wired',
++          items: [
++            { label: 'Puertos y red', note: 'Conexión con la TV', icon: 'fas fa-wifi', href: './config#network' },
++            { label: 'Dispositivos vinculados', note: 'Ver o quitar televisores', icon: 'fas fa-mobile-alt', href: './pin' },
++          ]
++        },
++        {
++          title: 'Ayuda y cuenta', icon: 'fas fa-life-ring',
++          items: [
++            { label: 'Resolución de problemas', note: 'Registros (logs) y reparaciones', icon: 'fas fa-stethoscope', href: './troubleshooting' },
++            { label: 'Idioma y general', note: 'Nombre de la PC, idioma', icon: 'fas fa-language', href: './config#general' },
++            { label: 'Cambiar contraseña', icon: 'fas fa-user-shield', href: './password' },
++            { label: 'Opciones avanzadas', icon: 'fas fa-sliders-h', href: './config#advanced' },
++            { label: 'Apoyar el proyecto', icon: 'fas fa-heart', href: '#apoyar' },
++          ]
++        },
++      ]
++    }
++  },
++  methods: {
++    post(url, question, done) {
++      if (!confirm(question)) return
++      this.busy = true
++      fetch(url, { credentials: 'include', method: 'POST', headers: { 'Content-Type': 'application/json' } })
++        .then(() => { this.message = done })
++        .catch(() => { this.message = done })
++        .finally(() => { setTimeout(() => { this.busy = false }, 3000) })
++    }
++  }
++}
++</script>
 diff --git a/src_assets/common/assets/web/apps.html b/src_assets/common/assets/web/apps.html
 index 47a0f80..be565db 100644
 --- a/src_assets/common/assets/web/apps.html
@@ -19709,6 +19797,108 @@ index 47a0f80..be565db 100644
  # https://github.com/ClassicOldSong/Apollo
  
  [host_uuid] ${this.hostUUID}
+diff --git a/src_assets/common/assets/web/config.html b/src_assets/common/assets/web/config.html
+index c0cb487..d4dd098 100644
+--- a/src_assets/common/assets/web/config.html
++++ b/src_assets/common/assets/web/config.html
+@@ -159,7 +159,7 @@
+           },
+           {
+             id: "input",
+-            name: "Input",
++            name: "Mando, teclado y mouse",
+             options: {
+               "controller": "enabled",
+               "gamepad": "auto",
+@@ -182,7 +182,7 @@
+           },
+           {
+             id: "av",
+-            name: "Audio/Video",
++            name: "Pantalla y audio",
+             options: {
+               "audio_sink": "",
+               "virtual_sink": "",
+@@ -214,7 +214,7 @@
+           },
+           {
+             id: "network",
+-            name: "Network",
++            name: "Red",
+             options: {
+               "upnp": "disabled",
+               "address_family": "ipv4",
+@@ -228,7 +228,7 @@
+           },
+           {
+             id: "files",
+-            name: "Config Files",
++            name: "Archivos",
+             options: {
+               "file_apps": "",
+               "credentials_file": "",
+@@ -240,7 +240,7 @@
+           },
+           {
+             id: "advanced",
+-            name: "Advanced",
++            name: "Avanzado",
+             options: {
+               "fec_percentage": 20,
+               "qp": 28,
+@@ -257,7 +257,7 @@
+           },
+           {
+             id: "nv",
+-            name: "NVIDIA NVENC Encoder",
++            name: "Codificador NVIDIA",
+             options: {
+               "nvenc_preset": 1,
+               "nvenc_twopass": "quarter_res",
+@@ -272,7 +272,7 @@
+           },
+           {
+             id: "qsv",
+-            name: "Intel QuickSync Encoder",
++            name: "Codificador Intel",
+             options: {
+               "qsv_preset": "medium",
+               "qsv_coder": "auto",
+@@ -281,7 +281,7 @@
+           },
+           {
+             id: "amd",
+-            name: "AMD AMF Encoder",
++            name: "Codificador AMD",
+             options: {
+               "amd_usage": "ultralowlatency",
+               "amd_rc": "vbr_latency",
+@@ -294,7 +294,7 @@
+           },
+           {
+             id: "vt",
+-            name: "VideoToolbox Encoder",
++            name: "Codificador VideoToolbox",
+             options: {
+               "vt_coder": "auto",
+               "vt_software": "auto",
+@@ -303,14 +303,14 @@
+           },
+           {
+             id: "vaapi",
+-            name: "VA-API Encoder",
++            name: "Codificador VA-API",
+             options: {
+               "vaapi_strict_rc_buffer": "disabled",
+             },
+           },
+           {
+             id: "sw",
+-            name: "Software Encoder",
++            name: "Codificador por software",
+             options: {
+               "sw_preset": "superfast",
+               "sw_tune": "zerolatency",
 diff --git a/src_assets/common/assets/web/configs/tabs/General.vue b/src_assets/common/assets/web/configs/tabs/General.vue
 index 039b7ec..604a572 100644
 --- a/src_assets/common/assets/web/configs/tabs/General.vue
@@ -19723,11 +19913,37 @@ index 039b7ec..604a572 100644
        <div class="form-text">{{ $t('config.sunshine_name_desc') }}</div>
      </div>
 diff --git a/src_assets/common/assets/web/index.html b/src_assets/common/assets/web/index.html
-index 1dc94d6..1b594c6 100644
+index 1dc94d6..873b550 100644
 --- a/src_assets/common/assets/web/index.html
 +++ b/src_assets/common/assets/web/index.html
-@@ -82,7 +82,7 @@
+@@ -8,8 +8,9 @@
+ <body id="app" v-cloak>
+   <Navbar></Navbar>
+   <div id="content" class="container">
+-    <h1 class="my-4">{{ $t('index.welcome') }}</h1>
+-    <p>{{ $t('index.description') }}</p>
++    <h1 class="mt-4 mb-2">{{ $t('index.welcome') }}</h1>
++    <p class="mb-1">{{ $t('index.description') }}</p>
++    <p class="turri-version" v-if="version">Versión {{version.version}} · {{ $t('index.version_latest') }}</p>
+     <div class="alert alert-danger" v-if="fancyLogs.find(x => x.level === 'Fatal')">
+       <div style="line-height: 32px;">
+         <i class="fas fa-circle-exclamation" style="font-size: 32px;margin-right: 0.25em;"></i>
+@@ -21,8 +22,9 @@
+       </ul>
+       <a class="btn btn-danger" href="./troubleshooting#logs">View Logs</a>
+     </div>
++    <Turri-Columns></Turri-Columns>
+     <!-- Version -->
+-    <div class="card p-2 my-4">
++    <div class="card p-2 my-4" v-if="version && (preReleaseBuildAvailable || stableBuildAvailable || buildVersionIsDirty)">
+       <div class="card-body" v-if="version">
+         <h2>Version {{version.version}}</h2>
+         <br>
+@@ -80,14 +82,16 @@
+   import Navbar from './Navbar.vue'
+   import ClientCard from './ClientCard.vue'
    import ResourceCard from './ResourceCard.vue'
++  import TurriColumns from './TurriColumns.vue'
    import ApolloVersion from './apollo_version'
  
 -  console.log("Hello, Apollo!")
@@ -19735,7 +19951,14 @@ index 1dc94d6..1b594c6 100644
    let app = createApp({
      components: {
        Navbar,
-@@ -105,8 +105,8 @@
+       ClientCard,
+-      ResourceCard
++      ResourceCard,
++      TurriColumns
+     },
+     data() {
+       return {
+@@ -105,8 +109,8 @@
          this.notifyPreReleases = config.notify_pre_releases;
          this.version = new ApolloVersion(null, config.version);
          console.log("Version: ", this.version.version)
@@ -19748,10 +19971,10 @@ index 1dc94d6..1b594c6 100644
            console.log("Pre-Release Version: ", this.preReleaseVersion.version)
 diff --git a/src_assets/common/assets/web/public/assets/css/turri.css b/src_assets/common/assets/web/public/assets/css/turri.css
 new file mode 100644
-index 0000000..5b6b4b4
+index 0000000..5173d1c
 --- /dev/null
 +++ b/src_assets/common/assets/web/public/assets/css/turri.css
-@@ -0,0 +1,90 @@
+@@ -0,0 +1,183 @@
 +/* Turri: gold "glass" theme over the Turri background */
 +:root, [data-bs-theme="light"], [data-bs-theme="dark"] {
 +  --turri-gold: #FBB71B;
@@ -19813,7 +20036,7 @@ index 0000000..5b6b4b4
 +  border-color: var(--turri-gold) !important;
 +  box-shadow: 0 0 0 .2rem rgba(251, 183, 27, .25) !important;
 +}
-+.form-check-input:checked { background-color: var(--turri-gold); border-color: var(--turri-gold); }
++.form-check-input:checked { background-color: #E0A000 !important; border-color: #E0A000 !important; }
 +.form-text, .text-muted { color: rgba(243, 234, 214, .65) !important; }
 +
 +/* buttons */
@@ -19842,6 +20065,99 @@ index 0000000..5b6b4b4
 +  box-shadow: 0 0 0 2px rgba(251, 183, 27, .55), 0 8px 28px rgba(0, 0, 0, .45); }
 +.turri-support { border: 1px solid rgba(251, 183, 27, .45) !important; }
 +.turri-support-link, .turri-support-link i { color: #ffb3c7 !important; }
++
++/* home: column menu (same idea as Carolina's menu) */
++.turri-version { color: var(--bs-secondary-color); font-size: .9rem; }
++.turri-cols { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; }
++@media (max-width: 1100px) { .turri-cols { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
++@media (max-width: 700px) { .turri-cols { grid-template-columns: 1fr; } }
++.turri-col { padding: 14px 10px 12px; border-radius: 20px; background: rgba(251, 183, 27, .07);
++  border: 1px solid rgba(251, 183, 27, .28); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
++  box-shadow: 0 10px 30px rgba(0, 0, 0, .35); }
++.turri-col h3 { font-size: 1.05rem; text-align: center; color: var(--turri-gold-soft); margin: 2px 0 12px; }
++.turri-col h3 i { color: var(--turri-gold); margin-right: 4px; }
++.turri-item { display: flex; gap: 10px; align-items: flex-start; width: 100%; text-align: left; margin: 4px 0;
++  padding: 9px 10px; border-radius: 12px; border: 1px solid transparent; background: transparent;
++  color: #f3ead6 !important; text-decoration: none; font-size: .92rem; line-height: 1.25; transition: .15s; }
++.turri-item i { color: var(--turri-gold); width: 18px; margin-top: 2px; text-align: center; flex: none; }
++.turri-item small { display: block; color: rgba(243, 234, 214, .6); font-size: .76rem; margin-top: 2px; }
++.turri-item:hover, .turri-item:focus-visible { background: rgba(251, 183, 27, .18); border-color: rgba(255, 215, 122, .7);
++  color: #fff !important; outline: none; }
++.turri-item:disabled { opacity: .5; }
++.turri-msg { background: rgba(251, 183, 27, .12) !important; border: 1px solid rgba(251, 183, 27, .4); color: #ffe7b0; }
++
++/* leave room for the "TURRI - Panel de control" title that is part of the background picture */
++nav.navbar + * { padding-top: clamp(70px, 9vw, 190px); }
++
++/* ===================== LIGHT MODE: dark text on light glass ===================== */
++[data-bs-theme="light"] {
++  --bs-body-color: #1d1606;
++  --bs-body-color-rgb: 29, 22, 6;
++  --bs-secondary-color: rgba(29, 22, 6, .70);
++  --bs-tertiary-color: rgba(29, 22, 6, .55);
++  --bs-emphasis-color: #000;
++  --bs-heading-color: #5c3d00;
++  --bs-link-color: #8a5a00;
++  --bs-link-color-rgb: 138, 90, 0;
++  --bs-link-hover-color: #5c3d00;
++  --bs-body-bg: #f8f1e1;
++  --bs-border-color: rgba(150, 100, 0, .30);
++  --turri-gold-soft: #6b4700;
++}
++[data-bs-theme="light"] body {
++  /* the same picture, behind a light veil */
++  background: linear-gradient(rgba(255, 248, 232, .84), rgba(255, 248, 232, .84)),
++              #f8f1e1 url('../turri/turri-bg.webp') center / cover fixed no-repeat !important;
++  color: var(--bs-body-color);
++}
++[data-bs-theme="light"] .navbar, [data-bs-theme="light"] .navbar-background {
++  background: rgba(255, 250, 238, .75) !important; border-bottom: 1px solid rgba(180, 120, 0, .30);
++}
++[data-bs-theme="light"] .navbar .nav-link, [data-bs-theme="light"] .navbar-brand, [data-bs-theme="light"] .navbar-text,
++[data-bs-theme="light"] .header .nav-link { color: #2b1f04 !important; }
++[data-bs-theme="light"] .navbar .nav-link:hover, [data-bs-theme="light"] .navbar .nav-link.active,
++[data-bs-theme="light"] .header .nav-link:hover, [data-bs-theme="light"] .header .nav-link.active { color: #9a6400 !important; }
++[data-bs-theme="light"] .navbar-toggler-icon { filter: none; }
++
++[data-bs-theme="light"] .card, [data-bs-theme="light"] .list-group-item, [data-bs-theme="light"] .modal-content,
++[data-bs-theme="light"] .dropdown-menu, [data-bs-theme="light"] .accordion-item, [data-bs-theme="light"] .accordion-button,
++[data-bs-theme="light"] .alert, [data-bs-theme="light"] .toast, [data-bs-theme="light"] .popover,
++[data-bs-theme="light"] .offcanvas, [data-bs-theme="light"] .table, [data-bs-theme="light"] .config-page {
++  background-color: rgba(255, 255, 255, .62) !important;
++  border: 1px solid rgba(180, 120, 0, .30) !important;
++  color: var(--bs-body-color) !important;
++}
++[data-bs-theme="light"] .card-header, [data-bs-theme="light"] .card-footer,
++[data-bs-theme="light"] .modal-header, [data-bs-theme="light"] .modal-footer { background: rgba(251, 183, 27, .12) !important; }
++[data-bs-theme="light"] h1, [data-bs-theme="light"] h2, [data-bs-theme="light"] h3, [data-bs-theme="light"] h4 {
++  color: #5c3d00; text-shadow: none;
++}
++
++[data-bs-theme="light"] .form-control, [data-bs-theme="light"] .form-select, [data-bs-theme="light"] .input-group-text {
++  background-color: rgba(255, 255, 255, .85) !important; color: #1d1606 !important; border-color: rgba(160, 105, 0, .35) !important;
++}
++[data-bs-theme="light"] .form-control::placeholder { color: rgba(29, 22, 6, .45); }
++[data-bs-theme="light"] .form-text, [data-bs-theme="light"] .text-muted { color: rgba(29, 22, 6, .65) !important; }
++[data-bs-theme="light"] .btn-secondary, [data-bs-theme="light"] .btn-outline-secondary, [data-bs-theme="light"] .btn-light {
++  background: rgba(255, 255, 255, .7) !important; border-color: rgba(180, 120, 0, .45) !important; color: #3a2a04 !important;
++}
++[data-bs-theme="light"] .nav-tabs .nav-link, [data-bs-theme="light"] .nav-pills .nav-link { color: #3a2a04 !important; }
++[data-bs-theme="light"] .nav-tabs .nav-link.active, [data-bs-theme="light"] .nav-pills .nav-link.active {
++  background: rgba(251, 183, 27, .25) !important; color: #5c3d00 !important;
++}
++[data-bs-theme="light"] pre, [data-bs-theme="light"] code { color: #3a2a04; }
++[data-bs-theme="light"] pre { background: rgba(255, 255, 255, .8) !important; }
++
++[data-bs-theme="light"] .turri-col { background: rgba(255, 255, 255, .58); border-color: rgba(180, 120, 0, .30);
++  box-shadow: 0 8px 24px rgba(120, 80, 0, .15); }
++[data-bs-theme="light"] .turri-col h3 { color: #5c3d00; }
++[data-bs-theme="light"] .turri-col h3 i, [data-bs-theme="light"] .turri-item i { color: #b07800; }
++[data-bs-theme="light"] .turri-item { color: #1d1606 !important; }
++[data-bs-theme="light"] .turri-item small { color: rgba(29, 22, 6, .62); }
++[data-bs-theme="light"] .turri-item:hover, [data-bs-theme="light"] .turri-item:focus-visible {
++  background: rgba(251, 183, 27, .22); border-color: rgba(180, 120, 0, .55); color: #000 !important; }
++[data-bs-theme="light"] .turri-msg { background: rgba(255, 244, 210, .9) !important; color: #3a2a04; }
++[data-bs-theme="light"] .turri-support-link, [data-bs-theme="light"] .turri-support-link i { color: #c2185b !important; }
 diff --git a/src_assets/common/assets/web/public/assets/locale/en.json b/src_assets/common/assets/web/public/assets/locale/en.json
 index f966922..fded091 100644
 --- a/src_assets/common/assets/web/public/assets/locale/en.json
@@ -20178,7 +20494,7 @@ index f966922..fded091 100644
      "welcome_success": "This page will reload soon, your browser will ask you for the new credentials",
      "login_success": "This page will reload soon."
 diff --git a/src_assets/common/assets/web/public/assets/locale/es.json b/src_assets/common/assets/web/public/assets/locale/es.json
-index cf0612f..9e0fd67 100644
+index cf0612f..28d3a65 100644
 --- a/src_assets/common/assets/web/public/assets/locale/es.json
 +++ b/src_assets/common/assets/web/public/assets/locale/es.json
 @@ -34,12 +34,21 @@
@@ -20607,7 +20923,7 @@ index cf0612f..9e0fd67 100644
    },
    "index": {
 -    "description": "Apollo es un servidor de transmisión de juego autoalojado para Moonlight.",
-+    "description": "Turri es un servidor de transmisión de juego autoalojado para Moonlight.",
++    "description": "Turri transmite los juegos de esta PC a tu televisor con Carolina (también funciona con cualquier cliente Moonlight).",
      "download": "Descargar",
 -    "installed_version_not_stable": "Está ejecutando una versión pre-lanzamiento de Apollo. Puede que experimente fallos u otros problemas. Por favor, informe de cualquier problema que encuentre. ¡Gracias por ayudar a hacer de Apollo un mejor software!",
 +    "installed_version_not_stable": "Está ejecutando una versión pre-lanzamiento de Turri. Puede que experimente fallos u otros problemas. Por favor, informe de cualquier problema que encuentre. ¡Gracias por ayudar a hacer de Turri un mejor software!",
