@@ -37,21 +37,30 @@ jobs:
       - name: Preparar la firma oficial (desde los secretos del repositorio)
         env:
           KEYSTORE_B64: ${{ secrets.CAROLINA_KEYSTORE_BASE64 }}
+          KEYSTORE_PASS: ${{ secrets.CAROLINA_KEYSTORE_PASSWORD }}
         run: |
-          if [ -n "$KEYSTORE_B64" ]; then
-            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/carolina.jks"
-            echo "CAROLINA_KEYSTORE=$RUNNER_TEMP/carolina.jks" >> "$GITHUB_ENV"
-            echo "Firma oficial de Carolina: SI"
-          else
+          if [ -z "$KEYSTORE_B64" ]; then
             echo "::warning::No hay secreto CAROLINA_KEYSTORE_BASE64: el APK se firma con una clave de prueba (no oficial)."
+            exit 0
           fi
+          # quitar espacios / saltos de linea que se cuelan al copiar y pegar
+          PASS="$(printf '%s' "$KEYSTORE_PASS" | tr -d '\r\n' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+          echo "::add-mask::$PASS"
+          printf '%s' "$KEYSTORE_B64" | tr -d ' \r\n' | base64 -d > "$RUNNER_TEMP/carolina.jks"
+          if ! keytool -list -keystore "$RUNNER_TEMP/carolina.jks" -storepass "$PASS" -alias carolina > /dev/null 2>&1; then
+            echo "::error::La contrasena del secreto CAROLINA_KEYSTORE_PASSWORD no coincide con la clave (o CAROLINA_KEYSTORE_BASE64 esta incompleto). Vuelve a pegarlos."
+            exit 1
+          fi
+          {
+            echo "CAROLINA_KEYSTORE=$RUNNER_TEMP/carolina.jks"
+            echo "CAROLINA_STORE_PASSWORD=$PASS"
+            echo "CAROLINA_KEY_PASSWORD=$PASS"
+            echo "CAROLINA_KEY_ALIAS=carolina"
+          } >> "$GITHUB_ENV"
+          echo "Firma oficial de Carolina: SI"
 
       - name: Compilar APK
         working-directory: artemis
-        env:
-          CAROLINA_STORE_PASSWORD: ${{ secrets.CAROLINA_KEYSTORE_PASSWORD }}
-          CAROLINA_KEY_PASSWORD: ${{ secrets.CAROLINA_KEYSTORE_PASSWORD }}
-          CAROLINA_KEY_ALIAS: carolina
         run: |
           chmod +x gradlew
           ./gradlew assembleNonRoot_gameDebug --no-daemon
