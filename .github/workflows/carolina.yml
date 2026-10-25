@@ -47,7 +47,13 @@ jobs:
           PASS="$(printf '%s' "$KEYSTORE_PASS" | tr -d '\r\n' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
           echo "::add-mask::$PASS"
           printf '%s' "$KEYSTORE_B64" | tr -d ' \r\n' | base64 -d > "$RUNNER_TEMP/carolina.jks"
-          if ! keytool -list -keystore "$RUNNER_TEMP/carolina.jks" -storepass "$PASS" -alias carolina > /dev/null 2>&1; then
+          # diagnostico (no muestra ningun secreto)
+          B64LEN=$(printf '%s' "$KEYSTORE_B64" | tr -d ' \r\n' | wc -c)
+          echo "Largo del texto de la clave: $B64LEN caracteres (deberia ser 5756)"
+          echo "Largo de la contrasena: ${#PASS} caracteres (deberia ser 24)"
+          echo "Tamano del archivo de clave: $(wc -c < "$RUNNER_TEMP/carolina.jks") bytes (deberia ser 4316 aprox.)"
+          if ! OUT=$(keytool -list -keystore "$RUNNER_TEMP/carolina.jks" -storepass "$PASS" -alias carolina 2>&1); then
+            echo "$OUT" | grep -v -i "storepass" | head -5
             echo "::error::La contrasena del secreto CAROLINA_KEYSTORE_PASSWORD no coincide con la clave (o CAROLINA_KEYSTORE_BASE64 esta incompleto). Vuelve a pegarlos."
             exit 1
           fi
