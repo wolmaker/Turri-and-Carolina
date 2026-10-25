@@ -34,11 +34,31 @@ jobs:
       - name: Instalar Android NDK
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;27.0.12077973" > /dev/null
 
+      - name: Preparar la firma oficial (desde los secretos del repositorio)
+        env:
+          KEYSTORE_B64: ${{ secrets.CAROLINA_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/carolina.jks"
+            echo "CAROLINA_KEYSTORE=$RUNNER_TEMP/carolina.jks" >> "$GITHUB_ENV"
+            echo "Firma oficial de Carolina: SI"
+          else
+            echo "::warning::No hay secreto CAROLINA_KEYSTORE_BASE64: el APK se firma con una clave de prueba (no oficial)."
+          fi
+
       - name: Compilar APK
         working-directory: artemis
+        env:
+          CAROLINA_STORE_PASSWORD: ${{ secrets.CAROLINA_KEYSTORE_PASSWORD }}
+          CAROLINA_KEY_PASSWORD: ${{ secrets.CAROLINA_KEYSTORE_PASSWORD }}
+          CAROLINA_KEY_ALIAS: carolina
         run: |
           chmod +x gradlew
           ./gradlew assembleNonRoot_gameDebug --no-daemon
+
+      - name: Borrar la clave de la maquina
+        if: always()
+        run: rm -f "$RUNNER_TEMP/carolina.jks"
 
       - name: Subir APK
         uses: actions/upload-artifact@v4
