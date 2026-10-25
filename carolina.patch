@@ -118,10 +118,10 @@ index ea0cf3e..10220ba 100755
          stopComputerUpdates();
 diff --git a/app/src/main/java/com/limelight/CarolinaMenu.java b/app/src/main/java/com/limelight/CarolinaMenu.java
 new file mode 100644
-index 0000000..bffdcaf
+index 0000000..94762ee
 --- /dev/null
 +++ b/app/src/main/java/com/limelight/CarolinaMenu.java
-@@ -0,0 +1,518 @@
+@@ -0,0 +1,545 @@
 +package com.limelight;
 +
 +import android.content.SharedPreferences;
@@ -181,6 +181,7 @@ index 0000000..bffdcaf
 +    private boolean guideOpen = false;
 +    private int guidePage = 0;
 +    private FrameLayout guideRoot;
++    private FrameLayout supportRoot;
 +    private final PcBindings bindings;
 +    private int guideSlot = PcBindings.A;
 +    // chooser (list of actions for the selected button)
@@ -229,6 +230,7 @@ index 0000000..bffdcaf
 +        add(0, () -> s(R.string.game_menu_pc_keyboard), game::openPcKeyboard, false);
 +        add(0, () -> "Guía de combinaciones de botones", this::openGuide, true);
 +        add(0, () -> "Estadísticas en pantalla", game::toggleHUD, true);
++        add(0, () -> "Apoyar el proyecto 💜", this::openSupport, true);
 +        add(0, () -> "Más opciones (menú clásico)", game::showClassicMenu, false);
 +        add(0, () -> "Volver al juego", null, false);
 +
@@ -284,6 +286,7 @@ index 0000000..bffdcaf
 +            if (root != null && root.getParent() instanceof ViewGroup) ((ViewGroup) root.getParent()).removeView(root);
 +            root = null;
 +            guideRoot = null;
++            supportRoot = null;
 +        });
 +    }
 +
@@ -325,6 +328,7 @@ index 0000000..bffdcaf
 +    private static boolean has(int m, int f) { return (m & f) != 0; }
 +
 +    private void nav(int dc, int dr) {
++        if (supportRoot != null) return;
 +        if (guideOpen) {
 +            if (choices != null) {
 +                if (dr != 0) { choiceIdx = (choiceIdx + dr + choices.length) % choices.length; renderGuide(); }
@@ -345,7 +349,29 @@ index 0000000..bffdcaf
 +        refresh();
 +    }
 +
++    private void openSupport() {
++        handler.post(() -> {
++            if (root == null) return;
++            supportRoot = new FrameLayout(game);
++            supportRoot.setBackgroundColor(0xCC000000);
++            supportRoot.setClickable(true);
++            supportRoot.setOnClickListener(v -> closeSupport());
++            View panel = com.limelight.utils.CarolinaSupport.buildView(game, "A o B: volver al menú", null);
++            supportRoot.addView(panel, new FrameLayout.LayoutParams(-2, -2, Gravity.CENTER));
++            root.addView(supportRoot, new FrameLayout.LayoutParams(-1, -1));
++        });
++    }
++
++    private boolean closeSupport() {
++        if (supportRoot == null) return false;
++        if (root != null) root.removeView(supportRoot);
++        supportRoot = null;
++        refresh();
++        return true;
++    }
++
 +    private void select() {
++        if (closeSupport()) return;
 +        if (guideOpen) {
 +            if (choices != null) {
 +                bindings.set(guidePage, guideSlot, choices[choiceIdx]);
@@ -371,6 +397,7 @@ index 0000000..bffdcaf
 +    }
 +
 +    private void back() {
++        if (closeSupport()) return;
 +        if (guideOpen) {
 +            if (choices != null) { choices = null; renderGuide(); }
 +            else closeGuide();
@@ -2283,10 +2310,10 @@ index 5b2d20d..b9825ac 100755
      public void onBackPressed() {
 diff --git a/app/src/main/java/com/limelight/utils/CarolinaAudio.java b/app/src/main/java/com/limelight/utils/CarolinaAudio.java
 new file mode 100644
-index 0000000..0c28ad3
+index 0000000..c6daba0
 --- /dev/null
 +++ b/app/src/main/java/com/limelight/utils/CarolinaAudio.java
-@@ -0,0 +1,241 @@
+@@ -0,0 +1,245 @@
 +package com.limelight.utils;
 +
 +import android.app.Activity;
@@ -2494,6 +2521,10 @@ index 0000000..0c28ad3
 +            lp.setMargins(dp(a, 6), 0, dp(a, 6), 0);
 +            bar.addView(greeting, lp);
 +            bar.addView(musicBtn, lp);
++            TextView support = button(a);
++            support.setText("Apoyar el proyecto 💜");
++            support.setOnClickListener(v -> CarolinaSupport.showDialog(a));
++            bar.addView(support, lp);
 +            FrameLayout.LayoutParams flp = new FrameLayout.LayoutParams(
 +                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.END);
 +            flp.setMargins(0, dp(a, 12), dp(a, 16), 0);
@@ -2525,6 +2556,152 @@ index 0000000..0c28ad3
 +    public static void hideLoadingBackground(View v) {
 +        if (v != null && v.getParent() instanceof ViewGroup) {
 +            ((ViewGroup) v.getParent()).removeView(v);
++        }
++    }
++}
+diff --git a/app/src/main/java/com/limelight/utils/CarolinaSupport.java b/app/src/main/java/com/limelight/utils/CarolinaSupport.java
+new file mode 100644
+index 0000000..a5727f3
+--- /dev/null
++++ b/app/src/main/java/com/limelight/utils/CarolinaSupport.java
+@@ -0,0 +1,140 @@
++package com.limelight.utils;
++
++import android.app.Activity;
++import android.app.AlertDialog;
++import android.content.Context;
++import android.graphics.Color;
++import android.graphics.Typeface;
++import android.graphics.drawable.GradientDrawable;
++import android.util.TypedValue;
++import android.view.Gravity;
++import android.view.View;
++import android.widget.ImageView;
++import android.widget.LinearLayout;
++import android.widget.TextView;
++
++import com.limelight.R;
++
++/**
++ * "Apoyar el proyecto": two QR codes (Patreon membership and the art-book shop)
++ * so the user can open them with a phone camera, since many TVs have no browser.
++ */
++public final class CarolinaSupport {
++    public static final String PATREON_URL = "https://www.patreon.com/c/jordan861/membership";
++    public static final String SHOP_URL = "https://www.patreon.com/c/jordan861/shop";
++
++    private CarolinaSupport() {
++    }
++
++    private static int dp(Context c, float v) {
++        return (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v, c.getResources().getDisplayMetrics());
++    }
++
++    private static TextView text(Context c, String s, float sp, int color, boolean bold) {
++        TextView t = new TextView(c);
++        t.setText(s);
++        t.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp);
++        t.setTextColor(color);
++        t.setGravity(Gravity.CENTER);
++        if (bold) t.setTypeface(Typeface.DEFAULT_BOLD);
++        return t;
++    }
++
++    private static View qrBox(Context c, int res, String title, String subtitle) {
++        LinearLayout box = new LinearLayout(c);
++        box.setOrientation(LinearLayout.VERTICAL);
++        box.setGravity(Gravity.CENTER_HORIZONTAL);
++        box.setPadding(dp(c, 14), dp(c, 12), dp(c, 14), dp(c, 12));
++        GradientDrawable g = new GradientDrawable();
++        g.setColor(0x33986FF2);
++        g.setCornerRadius(dp(c, 18));
++        g.setStroke(dp(c, 1), 0x88C8A0FF);
++        box.setBackground(g);
++        box.addView(text(c, title, 17, 0xFFF2E6FF, true));
++        ImageView qr = new ImageView(c);
++        qr.setImageResource(res);
++        qr.setBackgroundColor(Color.WHITE);
++        qr.setPadding(dp(c, 4), dp(c, 4), dp(c, 4), dp(c, 4));
++        LinearLayout.LayoutParams qlp = new LinearLayout.LayoutParams(dp(c, 170), dp(c, 170));
++        qlp.setMargins(0, dp(c, 10), 0, dp(c, 10));
++        box.addView(qr, qlp);
++        TextView sub = text(c, subtitle, 13, 0xFFD8C8F0, false);
++        sub.setMaxWidth(dp(c, 220));
++        box.addView(sub);
++        return box;
++    }
++
++    /** The panel content (used by the in-game menu overlay and by the home-screen dialog). */
++    public static View buildView(Context c, String footer, Runnable onClose) {
++        LinearLayout root = new LinearLayout(c);
++        root.setOrientation(LinearLayout.VERTICAL);
++        root.setGravity(Gravity.CENTER_HORIZONTAL);
++        root.setPadding(dp(c, 24), dp(c, 18), dp(c, 24), dp(c, 18));
++        GradientDrawable bg = new GradientDrawable();
++        bg.setColor(0xEE1A1030);
++        bg.setCornerRadius(dp(c, 24));
++        bg.setStroke(dp(c, 2), 0xFFB48CFF);
++        root.setBackground(bg);
++
++        root.addView(text(c, "Apoyar el proyecto 💜", 22, 0xFFEBD7FF, true));
++        TextView intro = text(c, "Turri y Carolina son gratis y siempre lo serán. Si te gustan y quieres ayudar a que sigan "
++                + "mejorando, escanea un código con la cámara de tu celular.", 14, 0xFFE6DCF5, false);
++        intro.setPadding(0, dp(c, 8), 0, dp(c, 14));
++        intro.setMaxWidth(dp(c, 560));
++        root.addView(intro);
++
++        LinearLayout row = new LinearLayout(c);
++        row.setOrientation(LinearLayout.HORIZONTAL);
++        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
++        lp.setMargins(dp(c, 10), 0, dp(c, 10), 0);
++        row.addView(qrBox(c, R.drawable.carolina_qr_patreon, "Apoyo mensual",
++                "En Patreon, desde 1 dólar al mes"), lp);
++        row.addView(qrBox(c, R.drawable.carolina_qr_tienda, "Libros de arte",
++                "Compra un libro de dibujo restaurado: apoyas y te llevas un libro"), lp);
++        root.addView(row);
++
++        TextView thanks = text(c, "patreon.com/c/jordan861 · ¡Gracias de corazón!", 13, 0xFFBBAADD, false);
++        thanks.setPadding(0, dp(c, 14), 0, 0);
++        root.addView(thanks);
++        if (footer != null) {
++            TextView f = text(c, footer, 12, 0xFF9F8FC0, false);
++            f.setPadding(0, dp(c, 6), 0, 0);
++            root.addView(f);
++        }
++        if (onClose != null) {
++            TextView close = text(c, "Cerrar", 15, Color.WHITE, true);
++            close.setPadding(dp(c, 28), dp(c, 8), dp(c, 28), dp(c, 8));
++            GradientDrawable n = new GradientDrawable();
++            n.setColor(0x44986FF2); n.setCornerRadius(dp(c, 18)); n.setStroke(dp(c, 1), 0x88C8A0FF);
++            GradientDrawable f = new GradientDrawable();
++            f.setColor(0x88986FF2); f.setCornerRadius(dp(c, 18)); f.setStroke(dp(c, 2), 0xFFE0C8FF);
++            android.graphics.drawable.StateListDrawable st = new android.graphics.drawable.StateListDrawable();
++            st.addState(new int[]{android.R.attr.state_focused}, f);
++            st.addState(new int[]{android.R.attr.state_pressed}, f);
++            st.addState(new int[]{}, n);
++            close.setBackground(st);
++            close.setFocusable(true);
++            close.setClickable(true);
++            close.setOnClickListener(v -> onClose.run());
++            LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(-2, -2);
++            clp.topMargin = dp(c, 14);
++            root.addView(close, clp);
++            close.post(close::requestFocus);
++        }
++        return root;
++    }
++
++    /** Home screens: a dialog that works with the TV remote. */
++    public static void showDialog(Activity a) {
++        try {
++            final AlertDialog[] holder = new AlertDialog[1];
++            View v = buildView(a, null, () -> { if (holder[0] != null) holder[0].dismiss(); });
++            holder[0] = new AlertDialog.Builder(a).setView(v).create();
++            holder[0].show();
++            if (holder[0].getWindow() != null) {
++                holder[0].getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
++            }
++        } catch (Exception ignored) {
 +        }
 +    }
 +}
@@ -5195,6 +5372,72 @@ z8XnaU6@BZ{Q0GMT>IST56~-LlVjl1B@WE8%JjVkKOq3$pINPGqBNvY@&bFd@=9r;8
 z+Ko^Ntgr>wAm4q~;<qdo4mOAfjo+iK7s(NUtpYAt(zqqqr7ZN`*TO%REJqw4ucQ|Y
 z7Q#5W4kzuU3NcJzJv~v3?Yn!*kv+J^^VBt(ya0x<2L7O5iR9pof)wuy1TtxbFm(fA
 Oe(xl!m=OPde*Xu}654tI
+
+literal 0
+HcmV?d00001
+
+diff --git a/app/src/main/res/drawable-nodpi/carolina_qr_patreon.png b/app/src/main/res/drawable-nodpi/carolina_qr_patreon.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..d51e9a7b6d6528bcd8a509d6a80138ed751a3510
+GIT binary patch
+literal 2179
+zcma)8e^8Ql7=Ni*mfBq0=4G=VSJ7>|vgQQ}<TSIib6{K8Wpui&#l2~nhhYXO)m_H=
+zu{v^D0=m+pES*hAU81(IcDLRa!(W9?%o;e7h<lSCrMNF_3^if>0pEL``#$%4p3n1n
+zp6@G2rfm$G9XcC=prFKr^<O{`uEY8Bp9VaE@iYnq`EN>GAG_s%#@PGd)DST^{`S1M
+zk0NJpeCi)|_VT{qm*;T>yUn3U&rSyP$)?b-;DDOujH-7bMLy;aDMMm-xZpI%><3O|
+z2snY^a!xQjH{S9(pGnuZI&7n=jD;_?V<VjwULW&!t|{+W)^mlS?m>gDr1?uq8vnNU
+zRF(tk56%(K_n$&91Twk}Otzl#c}Yd`eiMu>-0PqjdAJ#PCvG=h4@BU6_~b(UAR3{O
+zO1}E(;`?n;^fD|JuWeOwo9z@i=8So>V3)K0?vwYPULgmh?MD@CLR{xTb@iHT9mHvZ
+z1_JoDX~)CCxu^*`9zM=E_i4}L7;(f*wQh4x^c_L>uc!}F`J5#zN;!gyWN3Pip~E@o
+zy+K~ISbN&k;fZ>)B)&?IkL>x;Fygpcshe9~C1umr0c;Le*f<g<HI1L3mH!|OzJ#4D
+z&`=M{w&7q^-oVJrAy2E{q`}6EMry+dDE<mLx1dshEu<ZilC<4Q$3y$HOi;R~ewX3q
+zp=RT=%)*ahmh4*B$Oe6sRZyv$-%G6>=-}32|7dGU<)jOj?}-(&RM)Ea8|*J-5e|}S
+zW#sUDk!=S^HznIH>R-fZ<z4mhCDUI#BbU-Oji&{BC9A*Idu`G2@Rog5wP9qI-<F0v
+z&TVDxSqmkJYl0)z67r9N<~od!yO0T00b`_1c(Y8#wo1{<gE<)Qs7y~a-zv7P^i5)^
+zDK(?_5?wq71j`_^Qp%BggG>yuN^b4~vcDr3uOC-M?zBVZBxa6go)K*bf~^vZh@zjh
+zWyiCQM~kHSrpYRtAjy%o-yY4ut4z&Nr4r(;GDB0}^{747t;*cZ!-31ug5t=KR+qvi
+zNyI$}{h?ZUO2-khs%Wd2ZK8&MW=<ukt|thI+A^$e_rJ^nj@&psy=ftUQ753dgzfas
+z2r5G}bON<To43=rD8O6jYevof`8zZtg(P*CkSJViOciI)O2le=iHZ5WIJ{+sOKB5o
+zbTh?0DKehnENEmSB-PHyVG=PLfw9$uCa_Y*4a1}<=VySZ7rOg4CHr}ngQk}gnobC6
+z!^v7$qy38~-9>?1wShl(8c*(;M4)b<PMD=?*UimAaaUfAmLsHMTi><5cnuW~@_OH7
+zM0>UT?uuX7DKYws?YgB&JSju1%kOQJ2)cj9{QQ@BpQ(H8c{gO(YuH+3;gP$Aocw};
+zEIAv&vrd*H5jTA9u?<eZwVkkaO|~RPqu7e<NqAjF6IGlcV#>^!zR<#A<Em^<Y!S--
+zQ;Y?X^-ICJ!K_T6V{4~9kYf4+4e8(Kqc>DIz#uxDTw!3^m0WsBU7Nj$Hi}4*#Q?DP
+zM<%_VHE@Zd(n*mI2SpXh!?`p?ist@zvMeb^D&?#ILzC<)=YrVN0`{!RU4A0+*yB?u
+z>tTaLpgj*%^w@h}EUUoYX0R~&+9#!!m1NeOaz(o=YX1MI_M4}fg#vwjyM(TvH&$sa
+z;-tasxs_c)%OUYAMUQi7O*tjN$y~DcW}GGu=v!e(8dYAHE@m%P>oOa+sg!vEu=QJg
+zK+R$26EkIe%L3;rhtl=`JwKjF<l7Fu<83c{ZcV;1h0w?BA<v7kz-6KRSHZ^xlo(H2
+JU%f8<$lp3s#QXpN
+
+literal 0
+HcmV?d00001
+
+diff --git a/app/src/main/res/drawable-nodpi/carolina_qr_tienda.png b/app/src/main/res/drawable-nodpi/carolina_qr_tienda.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..0d9c019d5e2464fb265ed065377c1a0ed1142524
+GIT binary patch
+literal 1763
+zcmeAS@N?(olHy`uVBq!ia0y~yU|a&i985rwk9x<F7#P@AdAc};RNQ)d_hRpD0|D1S
+z>j3U(S1qsB=)hGslxD;$JBS%M_}t?;uX$iv#?Pi-5+8P6t77o^eprYhiCv)#jcB;R
+z*ddEaU{MLwh)w06x2yhanlHb<FZRX#`1#S-mVYWP`@3xSI?K1;Kka|9^;}t5!}SP;
+zjm!epD8vyyhc^svJ1*(1C<@D)9=o|WINig4-p{Z5H*7{y3RZ<6w(YWtD|vb*_Lk41
+zb&{91+&q7(dVLMw@_F{R3&XCT<NF}Rjop6-IHs$fm{@i$?fC1NRe3sPkU+rnb%*SM
+z#~%%(Pn&B!_bETS=-sU6rr)#DaR-`9mZfy{r#nec_hdbNzU1uQG8^-2HtXkt!V^mX
+z0!3vM^32Mv|9N~;>wLo6IhlKv-|oAVHuLQp2816GEKry=Je!xTyINq;<H)5`zt1~n
+zxfbenL@XkF;jr`4%^Sc#>3hEDUSQ?f%>CiFewBn&Udw&@IXRuZqL&pd3IwcyQE-GW
+zp=C#L@?7~@o9(6=Ps+SLx$J%LOt@OG3KZgAiSOQxvFXiaHqE84*1TJHe|1r<)jxeJ
+zJ87`fuqBZW*@B)+#mSe`JeIGT^K<Q=Ij7Qfd~fxX9sj>+uIvL-F%<K`{s((q@X@*6
+zw-(c{7y4}|irf15&g#!i&tv=X>hMZW_P6`}>0G(*+;Cs(#oHbm-~V_|dw#k#DDfde
+z7MW$?_A)2uDNn+!^1Ftm@3ubvyg7UB<!7PgFDu^TPr82le)esiUmh|q^wvl7w?Cra
+z{93oAbQ?VNVtVS{mzZqV*nnGe9$YE5_n-DHr({m*JB#RCym14J(v`)_g3pJ~wQ`R7
+zIlHXp+46a%*?6@8qx1a@)9aCz+iw(}+w!UE(lyJsmNq|&-$0WYMqUIaGx6}_-G0`~
+zukPGv`FgUM`Q5^QR=Ml$oC9UjBYYU?1{jzXfmYJ9%bvYl_kPu$^;?SVwdeP)++Y2)
+zUj41*76M@q*(xA={?U_a+4E=SR@veW<c!L^9QWO64BF|Om*@4yexLVErfkpmzVi$5
+zrh;`_xL;WmPdCetu>4*5d{%kv`71YHol38JRkIOS-UQ|+na8gxE@p0?pZPu1^8byG
+zv;5~hzq{3LYIX*+0Kk^A_w3Md?A!A5!l~b0vp4$gezxWQ6=;|tq8|}@Km5-e`{b{F
+zKB{bv{=L$8jI4|(VI4M1+q^N&toYjUqHCKz)m%MQoUHxc_U&$16k>^!2J@q5kIk!D
+z_jFyg|LmJKH`iHSKDG1u%JXe_g9=o-Fx<F_SqESgq~H<<QP`lcuoQMc<#V3%_pg-C
+Vab7<$7Fc;Pc)I$ztaD0e0sx&);%NW?
 
 literal 0
 HcmV?d00001
