@@ -46,6 +46,10 @@ Dos partes que, juntas, reducen la distancia entre la PC y la tele.
 
 ---
 
+## Documentación
+
+📄 **[Informe completo de cambios y mejoras (PDF)](docs/Informe-Turri-y-Carolina-1.4-1.2.pdf)**: Carolina 1.4 y Turri 1.2. Incluye capturas de todos los menús, la guía rápida de instalación y uso, el historial de versiones y los problemas resueltos.
+
 ## Cómo se compila
 
 Ambos se compilan solos con **GitHub Actions** (pestaña *Actions*):
