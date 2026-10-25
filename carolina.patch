@@ -1,17 +1,23 @@
 diff --git a/app/build.gradle b/app/build.gradle
-index 3a3494f..622b67c 100644
+index 3a3494f..6cbbc1c 100644
 --- a/app/build.gradle
 +++ b/app/build.gradle
-@@ -93,12 +93,22 @@ android {
+@@ -93,12 +93,28 @@ android {
          }
      }
  
 +    signingConfigs {
++        // Carolina's private signing key is NOT in the repository: GitHub Actions
++        // provides it from the repository secrets (see .github/workflows/carolina.yml).
++        // Without it (forks, local builds) the normal debug key is used.
 +        carolina {
-+            storeFile file('carolina.keystore')
-+            storePassword 'carolina2026'
-+            keyAlias 'carolina'
-+            keyPassword 'carolina2026'
++            def ks = System.getenv('CAROLINA_KEYSTORE')
++            if (ks) {
++                storeFile file(ks)
++                storePassword System.getenv('CAROLINA_STORE_PASSWORD')
++                keyAlias System.getenv('CAROLINA_KEY_ALIAS') ?: 'carolina'
++                keyPassword System.getenv('CAROLINA_KEY_PASSWORD')
++            }
 +        }
 +    }
 +
@@ -25,69 +31,10 @@ index 3a3494f..622b67c 100644
 +            resValue "string", "app_label", "Carolina"
 +            resValue "string", "app_label_root", "Carolina (Root)"
 +            resValue "string", "app_label_game", "Carolina"
-+            signingConfig signingConfigs.carolina
++            signingConfig System.getenv('CAROLINA_KEYSTORE') ? signingConfigs.carolina : signingConfigs.debug
  
              minifyEnabled true
              proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
-diff --git a/app/carolina.keystore b/app/carolina.keystore
-new file mode 100644
-index 0000000000000000000000000000000000000000..8c51c9edf85647e06083ffc39f4ba1855a5585d1
-GIT binary patch
-literal 2652
-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
-
-literal 0
-HcmV?d00001
-
 diff --git a/app/src/main/java/com/limelight/AppView.java b/app/src/main/java/com/limelight/AppView.java
 index ea0cf3e..10220ba 100755
 --- a/app/src/main/java/com/limelight/AppView.java
