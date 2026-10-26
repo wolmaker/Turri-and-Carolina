@@ -35,11 +35,49 @@ index 3a3494f..6cbbc1c 100644
  
              minifyEnabled true
              proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+diff --git a/app/src/main/AndroidManifest.xml b/app/src/main/AndroidManifest.xml
+index 6fa6177..3af2eb0 100755
+--- a/app/src/main/AndroidManifest.xml
++++ b/app/src/main/AndroidManifest.xml
+@@ -161,6 +161,11 @@
+             android:launchMode="singleInstance"
+             android:taskAffinity=""
+             android:theme="@style/ExternalDisplayControllerTheme"/>
++        <activity
++            android:name=".CarolinaSettings"
++            android:configChanges="mcc|mnc|touchscreen|keyboard|keyboardHidden|navigation|screenLayout|fontScale|uiMode|orientation|screenSize|smallestScreenSize|layoutDirection"
++            android:label="Carolina"
++            android:theme="@style/AppTheme" />
+         <activity
+             android:name=".preferences.StreamSettings"
+             android:resizeableActivity="true"
 diff --git a/app/src/main/java/com/limelight/AppView.java b/app/src/main/java/com/limelight/AppView.java
-index ea0cf3e..10220ba 100755
+index ea0cf3e..5ee2ebe 100755
 --- a/app/src/main/java/com/limelight/AppView.java
 +++ b/app/src/main/java/com/limelight/AppView.java
-@@ -305,6 +305,7 @@ public class AppView extends AppCompatActivity implements AdapterFragmentCallbac
+@@ -56,6 +56,8 @@ import androidx.appcompat.app.AppCompatActivity;
+ import org.xmlpull.v1.XmlPullParserException;
+ 
+ public class AppView extends AppCompatActivity implements AdapterFragmentCallbacks {
++    // Carolina greets once each time this PC's list is opened and the PC really answers
++    private boolean carolinaGreeted = false;
+     private AppGridAdapter appGridAdapter;
+     private String uuidString;
+     private ShortcutHelper shortcutHelper;
+@@ -242,6 +244,12 @@ public class AppView extends AppCompatActivity implements AdapterFragmentCallbac
+                     return;
+                 }
+ 
++                // The PC answered (online and paired): Carolina's greeting
++                if (details.state == ComputerDetails.State.ONLINE && !carolinaGreeted) {
++                    carolinaGreeted = true;
++                    AppView.this.runOnUiThread(() -> com.limelight.utils.CarolinaAudio.onPcConnected(AppView.this));
++                }
++
+                 // App list is the same or empty
+                 if (details.rawAppList == null || details.rawAppList.equals(lastRawApplist)) {
+ 
+@@ -305,6 +313,7 @@ public class AppView extends AppCompatActivity implements AdapterFragmentCallbac
          UiHelper.setLocale(this);
  
          setContentView(R.layout.activity_app_view);
@@ -47,7 +85,7 @@ index ea0cf3e..10220ba 100755
  
          // Allow floating expanded PiP overlays while browsing apps
          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-@@ -397,6 +398,7 @@ public class AppView extends AppCompatActivity implements AdapterFragmentCallbac
+@@ -397,6 +406,7 @@ public class AppView extends AppCompatActivity implements AdapterFragmentCallbac
  
          inForeground = true;
          startComputerUpdates();
@@ -55,7 +93,7 @@ index ea0cf3e..10220ba 100755
  
          ExtendedFloatingActionButton profilesButton = findViewById(R.id.profilesButton);
          // User report Samsung and Xiaomi devices have this problem
-@@ -416,6 +418,7 @@ public class AppView extends AppCompatActivity implements AdapterFragmentCallbac
+@@ -416,6 +426,7 @@ public class AppView extends AppCompatActivity implements AdapterFragmentCallbac
      @Override
      protected void onPause() {
          super.onPause();
@@ -990,8 +1028,556 @@ index 0000000..b1ad2c2
 +        openHelpBox();
 +    }
 +}
+diff --git a/app/src/main/java/com/limelight/CarolinaSettings.java b/app/src/main/java/com/limelight/CarolinaSettings.java
+new file mode 100644
+index 0000000..4f075b1
+--- /dev/null
++++ b/app/src/main/java/com/limelight/CarolinaSettings.java
+@@ -0,0 +1,542 @@
++package com.limelight;
++
++import android.app.Activity;
++import android.content.Intent;
++import android.content.SharedPreferences;
++import android.graphics.Color;
++import android.graphics.PorterDuff;
++import android.graphics.Typeface;
++import android.graphics.drawable.GradientDrawable;
++import android.graphics.drawable.StateListDrawable;
++import android.os.Bundle;
++import android.util.TypedValue;
++import android.view.Gravity;
++import android.view.KeyEvent;
++import android.view.View;
++import android.view.ViewGroup;
++import android.widget.FrameLayout;
++import android.widget.ImageView;
++import android.widget.LinearLayout;
++import android.widget.ScrollView;
++import android.widget.TextView;
++
++import com.limelight.binding.input.PcBindings;
++import com.limelight.preferences.StreamSettings;
++import com.limelight.profiles.ProfilesManager;
++import com.limelight.utils.CarolinaAudio;
++import com.limelight.utils.CarolinaSupport;
++
++import java.util.ArrayList;
++import java.util.List;
++
++/**
++ * Carolina's settings screen (opened from the golden gear on the main screen).
++ * Same look as the in-game menu: glass columns over the Carolina background,
++ * and boxes on top with only the settings of each topic. Works with the TV remote
++ * and the controller through normal Android focus (D-pad, OK/A, Back/B).
++ */
++public class CarolinaSettings extends Activity {
++    private static final int GOLD = 0xFFFBB71B;
++
++    private interface Label { String get(); }
++
++    private interface Setting {
++        String title();
++        String value();
++        void change(int dir);
++    }
++
++    private static class Item {
++        final Label label;
++        final Runnable action;
++        TextView view;
++        Item(Label l, Runnable a) { label = l; action = a; }
++    }
++
++    private final List<String> titles = new ArrayList<>();
++    private final List<List<Item>> columns = new ArrayList<>();
++    private FrameLayout root;
++    private LinearLayout columnsRow;
++    private FrameLayout overlay;
++    private View focusBeforeOverlay;
++    private PcBindings bindings;
++
++    // ------------------------------------------------------------ helpers
++
++    private int dp(float v) {
++        return (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v, getResources().getDisplayMetrics());
++    }
++
++    private SharedPreferences prefs() {
++        return ProfilesManager.getInstance().getOverlayingSharedPreferences(this);
++    }
++
++    private GradientDrawable glass(int fill, int stroke, float radius, int strokeDp) {
++        GradientDrawable g = new GradientDrawable();
++        g.setColor(fill);
++        g.setCornerRadius(dp(radius));
++        g.setStroke(dp(strokeDp), stroke);
++        return g;
++    }
++
++    private StateListDrawable selectable() {
++        StateListDrawable s = new StateListDrawable();
++        GradientDrawable on = glass(0x66AA78FF, 0xCCE0C8FF, 12, 2);
++        s.addState(new int[]{android.R.attr.state_focused}, on);
++        s.addState(new int[]{android.R.attr.state_pressed}, on);
++        s.addState(new int[]{}, new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
++        return s;
++    }
++
++    private TextView text(String s, float sp, int color, boolean bold) {
++        TextView t = new TextView(this);
++        t.setText(s);
++        t.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp);
++        t.setTextColor(color);
++        if (bold) t.setTypeface(Typeface.DEFAULT_BOLD);
++        return t;
++    }
++
++    private void add(int column, Label l, Runnable a) {
++        columns.get(column).add(new Item(l, a));
++    }
++
++    // ------------------------------------------------------------ settings types
++
++    private Setting listSetting(String title, String key, String def, int namesRes, int valuesRes) {
++        final String[] names = getResources().getStringArray(namesRes);
++        final String[] values = getResources().getStringArray(valuesRes);
++        return new Setting() {
++            int index() {
++                String cur = prefs().getString(key, def);
++                for (int i = 0; i < values.length; i++) if (values[i].equals(cur)) return i;
++                return -1;
++            }
++            public String title() { return title; }
++            public String value() {
++                int i = index();
++                return i >= 0 && i < names.length ? names[i] : prefs().getString(key, def);
++            }
++            public void change(int dir) {
++                int i = index();
++                i = i < 0 ? 0 : (i + dir + values.length) % values.length;
++                prefs().edit().putString(key, values[i]).apply();
++            }
++        };
++    }
++
++    private Setting boolSetting(String title, String key, boolean def) {
++        return new Setting() {
++            public String title() { return title; }
++            public String value() { return prefs().getBoolean(key, def) ? "Activado" : "Desactivado"; }
++            public void change(int dir) { prefs().edit().putBoolean(key, !prefs().getBoolean(key, def)).apply(); }
++        };
++    }
++
++    private Setting intSetting(String title, String key, int def, int step, int min, int max, String suffix) {
++        return new Setting() {
++            public String title() { return title; }
++            public String value() { return prefs().getInt(key, def) + suffix; }
++            public void change(int dir) {
++                int v = Math.max(min, Math.min(max, prefs().getInt(key, def) + dir * step));
++                prefs().edit().putInt(key, v).apply();
++            }
++        };
++    }
++
++    private Setting bitrateSetting() {
++        final String key = "seekbar_bitrate_kbps";
++        return new Setting() {
++            int cur() {
++                int v = prefs().getInt(key, 0);
++                return v > 0 ? v : com.limelight.preferences.PreferenceConfiguration.getDefaultBitrate(CarolinaSettings.this);
++            }
++            public String title() { return "Tasa de bits (calidad)"; }
++            public String value() {
++                int v = cur();
++                return (v % 1000 == 0 ? String.valueOf(v / 1000) : String.format(java.util.Locale.US, "%.1f", v / 1000f)) + " Mbps";
++            }
++            public void change(int dir) {
++                int v = cur();
++                int step = v < 10000 || (v == 10000 && dir < 0) ? 1000 : 5000;
++                v = Math.max(1000, Math.min(150000, v + dir * step));
++                prefs().edit().putInt(key, v).apply();
++            }
++        };
++    }
++
++    private Setting carolinaGreeting() {
++        return new Setting() {
++            public String title() { return "Saludos de Carolina y Turri"; }
++            public String value() { return CarolinaAudio.isGreetingOn(CarolinaSettings.this) ? "Activados" : "Silenciados"; }
++            public void change(int dir) { CarolinaAudio.setGreetingOn(CarolinaSettings.this, !CarolinaAudio.isGreetingOn(CarolinaSettings.this)); }
++        };
++    }
++
++    private Setting carolinaMusic() {
++        return new Setting() {
++            public String title() { return "Música de fondo"; }
++            public String value() { return CarolinaAudio.isMusicOn(CarolinaSettings.this) ? "Sonando" : "En pausa"; }
++            public void change(int dir) { CarolinaAudio.setMusicOn(CarolinaSettings.this, !CarolinaAudio.isMusicOn(CarolinaSettings.this)); }
++        };
++    }
++
++    private Setting carolinaVolume() {
++        return new Setting() {
++            public String title() { return "Volumen de la música y los saludos"; }
++            public String value() { return CarolinaAudio.getVolumePercent(CarolinaSettings.this) + "%"; }
++            public void change(int dir) {
++                CarolinaAudio.setVolumePercent(CarolinaSettings.this, CarolinaAudio.getVolumePercent(CarolinaSettings.this) + dir * 5);
++            }
++        };
++    }
++
++    /** All editable buttons of the 4 layers, one row each. */
++    private Setting[] buttonSettings() {
++        List<Setting> list = new ArrayList<>();
++        for (int layer = 0; layer < 4; layer++) {
++            for (int slot = 0; slot < 16; slot++) {
++                if (!PcBindings.editable(layer, slot)) continue;
++                final int l = layer, s = slot;
++                list.add(new Setting() {
++                    public String title() { return PcBindings.LAYER_NAMES[l] + " · " + PcBindings.SLOT_NAMES[s]; }
++                    public String value() { return bindings.get(l, s).label; }
++                    public void change(int dir) {
++                        PcBindings.Action[] ch = PcBindings.choicesFor(l, s);
++                        int i = 0;
++                        for (int k = 0; k < ch.length; k++) if (ch[k] == bindings.get(l, s)) i = k;
++                        bindings.set(l, s, ch[(i + dir + ch.length) % ch.length]);
++                    }
++                });
++            }
++        }
++        return list.toArray(new Setting[0]);
++    }
++
++    // ------------------------------------------------------------ content
++
++    private void build() {
++        String[] t = {"Video", "Sonido", "Mando", "Teclado y mouse", "Red", "Carolina"};
++        for (String x : t) { titles.add(x); columns.add(new ArrayList<>()); }
++        final String videoNote = "Se aplica la próxima vez que empieces a jugar.";
++
++        add(0, () -> "Resolución, FPS y tasa de bits…", () -> openBox("Resolución, FPS y tasa de bits", new Setting[]{
++                listSetting("Resolución", "list_resolution", "1280x720", R.array.resolution_names, R.array.resolution_values),
++                listSetting("Cuadros por segundo (FPS)", "list_fps", "60", R.array.fps_names, R.array.fps_values),
++                bitrateSetting(),
++                listSetting("Ritmo de cuadros", "frame_pacing", "latency", R.array.video_frame_pacing_names, R.array.video_frame_pacing_values),
++        }, videoNote));
++        add(0, () -> "Códec y HDR…", () -> openBox("Códec y HDR", new Setting[]{
++                listSetting("Códec de video", "video_format", "auto", R.array.video_format_names, R.array.video_format_values),
++                boolSetting("HDR", "checkbox_enable_hdr", false),
++        }, videoNote));
++        add(0, () -> "Ajuste de imagen…", () -> openBox("Ajuste de imagen", new Setting[]{
++                listSetting("Ajuste a la pantalla", "list_video_scale_mode", "fit", R.array.video_scale_mode_names, R.array.video_scale_mode_values),
++                intSetting("Escala de resolución", "seekbar_resolution_scale_factor", 100, 5, 20, 200, "%"),
++        }, videoNote));
++
++        add(1, () -> "Sonido del juego…", () -> openBox("Sonido del juego", new Setting[]{
++                listSetting("Canales", "list_audio_config", "2", R.array.audio_config_names, R.array.audio_config_values),
++                boolSetting("Sonido también en la PC", "checkbox_host_audio", false),
++                boolSetting("Mejoras de audio del televisor", "checkbox_enable_audiofx", false),
++        }, videoNote));
++        add(1, () -> "Música y saludos de Carolina…", () -> openBox("Música y saludos de Carolina", new Setting[]{
++                carolinaGreeting(), carolinaMusic(), carolinaVolume(),
++        }, "Los cambios se oyen al instante."));
++
++        add(2, () -> "Cambiar botones del mando…", () -> { bindings.load(); openBox("Cambiar botones del mando (Modo PC)", buttonSettings(),
++                "◀ ▶ cambia lo que hace cada botón. Se guarda al instante."); });
++        add(2, () -> "Restablecer todos los botones", () -> {
++            bindings.resetAll();
++            android.widget.Toast.makeText(this, "Botones del Modo PC restablecidos", android.widget.Toast.LENGTH_SHORT).show();
++        });
++        add(2, () -> "Opciones del mando…", () -> openBox("Opciones del mando", new Setting[]{
++                boolSetting("Intercambiar A/B y X/Y", "checkbox_flip_face_buttons", false),
++                boolSetting("Varios mandos a la vez", "checkbox_multi_controller", true),
++                intSetting("Zona muerta de los sticks", "seekbar_deadzone", 5, 1, 0, 20, "%"),
++                boolSetting("Mensajes de diagnóstico del mando", "checkbox_diag_messages", true),
++        }, videoNote));
++        add(2, () -> "Vibración: " + (prefs().getBoolean("checkbox_enable_rumble", true) ? "activada" : "desactivada"),
++                () -> prefs().edit().putBoolean("checkbox_enable_rumble", !prefs().getBoolean("checkbox_enable_rumble", true)).apply());
++
++        add(3, () -> "Modo PC…", () -> openBox("Modo PC (mando como mouse y teclado)", new Setting[]{
++                boolSetting("Modo PC disponible (View + Menú)", "checkbox_pc_mode", true),
++                intSetting("Velocidad del puntero", "seekbar_pc_mouse_speed", 60, 10, 10, 100, "%"),
++                intSetting("Aceleración", "seekbar_pc_mouse_accel", 50, 10, 0, 100, "%"),
++                intSetting("Desplazamiento", "seekbar_pc_scroll_speed", 80, 10, 10, 100, "%"),
++                intSetting("Zona muerta izquierda", "seekbar_pc_deadzone_left", 24, 2, 10, 40, "%"),
++                intSetting("Zona muerta derecha", "seekbar_pc_deadzone_right", 27, 2, 10, 40, "%"),
++                boolSetting("Sonido al activar o desactivar", "checkbox_pc_mode_sound", true),
++        }, videoNote));
++        add(3, () -> "Guía de combinaciones de botones", () -> openText("Guía de combinaciones de botones", guideHtml()));
++
++        add(4, () -> "Latencia y ancho de banda…", () -> openBox("Latencia y ancho de banda", new Setting[]{
++                bitrateSetting(),
++                boolSetting("Latencia ultra baja", "checkbox_ultra_low_latency", false),
++                boolSetting("Evitar pérdida de paquetes", "checkbox_prevent_packet_loss", false),
++                listSetting("Ritmo de cuadros", "frame_pacing", "latency", R.array.video_frame_pacing_names, R.array.video_frame_pacing_values),
++        }, videoNote));
++        add(4, () -> "Estadísticas en pantalla…", () -> openBox("Estadísticas en pantalla", new Setting[]{
++                boolSetting("Mostrar al empezar a jugar", "checkbox_enable_perf_overlay", false),
++                boolSetting("Versión compacta", "checkbox_enable_perf_overlay_lite", false),
++                boolSetting("Mostrarlas abajo", "checkbox_enable_perf_overlay_bottom", false),
++        }, videoNote));
++
++        add(5, () -> "Idioma…", () -> openBox("Idioma", new Setting[]{
++                listSetting("Idioma de Carolina", "list_languages", "default", R.array.language_names, R.array.language_values),
++        }, "Se aplica al volver a abrir Carolina."));
++        add(5, () -> "Apoyar el proyecto 💜", () -> CarolinaSupport.showDialog(this));
++        add(5, () -> "Acerca de Carolina", () -> openText("Acerca de Carolina", aboutHtml()));
++        add(5, () -> "Menú original (avanzado)", () -> startActivity(new Intent(this, StreamSettings.class)));
++    }
++
++    private static String esc(String t) {
++        return t.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
++    }
++
++    private String guideHtml() {
++        bindings.load();
++        StringBuilder h = new StringBuilder();
++        h.append("<b><font color='#EBD7FF'>Lo básico</font></b><br>");
++        h.append("• <b>Modo PC</b>: el mando se vuelve mouse y teclado para usar Windows. Se activa y desactiva con <b>View + Menú</b>.<br>");
++        h.append("• <b>Mantener Menú</b> (1 segundo, dentro del juego): abre el menú de Carolina.<br>");
++        h.append("• <b>View</b> funciona como Shift: mantenlo y pulsa otro botón para las combinaciones.<br>");
++        h.append("• Con el Modo PC <b>desactivado</b>, el mando funciona normal en los juegos.<br>");
++        String[] heads = {"En el escritorio (Modo PC)", "Combinaciones con View", "Con el teclado en pantalla abierto", "Combinaciones con View (teclado abierto)"};
++        for (int layer = 0; layer < 4; layer++) {
++            h.append("<br><b><font color='#EBD7FF'>").append(heads[layer]).append("</font></b><br>");
++            for (int slot = 0; slot < 16; slot++) {
++                if (slot == PcBindings.VIEW) continue;
++                String d = bindings.describe(layer, slot);
++                if ("—".equals(d)) continue;
++                String name = PcBindings.SLOT_NAMES[slot];
++                if (layer == PcBindings.DESK_VIEW || layer == PcBindings.KB_VIEW) name = "View + " + name;
++                h.append("• <b>").append(esc(name)).append("</b>: ").append(esc(d)).append("<br>");
++            }
++        }
++        return h.toString();
++    }
++
++    private String aboutHtml() {
++        return "<b><font color='#EBD7FF'>Carolina 1.5</font></b> · para Android TV<br>"
++                + "Juega en el televisor los juegos de tu PC, junto con <b>Turri</b> (el programa de la PC).<br><br>"
++                + "<b><font color='#EBD7FF'>¿Por qué Carolina?</font></b><br>"
++                + "A comienzos del siglo XIX, el inventor italiano Pellegrino Turri construyó una de las primeras "
++                + "máquinas de escribir para su querida amiga, la condesa Carolina Fantoni, que había perdido la vista. "
++                + "Para darle tinta inventó también el papel carbón, y gracias a eso ella pudo volver a escribir sus cartas. "
++                + "Turri es el que construye y envía; Carolina, la que recibe y responde.<br><br>"
++                + "<b><font color='#EBD7FF'>Basado en</font></b><br>"
++                + "Artemis (ClassicOldSong) y Moonlight. Licencia GPL-3.0.<br><br>"
++                + "github.com/wolmaker/Turri-and-Carolina";
++    }
++
++    // ------------------------------------------------------------ screen
++
++    @Override
++    protected void onCreate(Bundle savedInstanceState) {
++        super.onCreate(savedInstanceState);
++        bindings = new PcBindings(this);
++        build();
++
++        root = new FrameLayout(this);
++        ImageView bg = new ImageView(this);
++        bg.setImageResource(R.drawable.carolina_home);
++        bg.setScaleType(ImageView.ScaleType.CENTER_CROP);
++        bg.setBackgroundColor(Color.BLACK);
++        root.addView(bg, new FrameLayout.LayoutParams(-1, -1));
++
++        // golden title next to the Carolina logo of the background
++        LinearLayout title = new LinearLayout(this);
++        title.setOrientation(LinearLayout.HORIZONTAL);
++        title.setGravity(Gravity.CENTER_VERTICAL);
++        ImageView gear = new ImageView(this);
++        gear.setImageResource(R.drawable.ic_settings);
++        gear.setColorFilter(GOLD, PorterDuff.Mode.SRC_IN);
++        title.addView(gear, new LinearLayout.LayoutParams(dp(30), dp(30)));
++        TextView tt = text("  Configuración de Carolina", 26, GOLD, true);
++        tt.setShadowLayer(dp(8), 0, 0, 0x99FBAA14);
++        title.addView(tt);
++        FrameLayout.LayoutParams tlp = new FrameLayout.LayoutParams(-2, -2);
++        tlp.leftMargin = dp(345);
++        tlp.topMargin = dp(48);
++        root.addView(title, tlp);
++
++        columnsRow = new LinearLayout(this);
++        columnsRow.setOrientation(LinearLayout.HORIZONTAL);
++        FrameLayout.LayoutParams rlp = new FrameLayout.LayoutParams(-1, -1);
++        rlp.setMargins(dp(30), dp(124), dp(30), dp(30));
++        root.addView(columnsRow, rlp);
++
++        Item first = null;
++        for (int c = 0; c < columns.size(); c++) {
++            LinearLayout p = new LinearLayout(this);
++            p.setOrientation(LinearLayout.VERTICAL);
++            p.setPadding(dp(8), dp(10), dp(8), dp(10));
++            p.setBackground(glass(0x2A986FF2, 0x55C8A0FF, 20, 1));
++            LinearLayout.LayoutParams plp = new LinearLayout.LayoutParams(0, -1, 1f);
++            plp.setMargins(dp(6), 0, dp(6), 0);
++            columnsRow.addView(p, plp);
++
++            TextView h = text(titles.get(c), 16, 0xFFEBD7FF, true);
++            h.setGravity(Gravity.CENTER);
++            h.setPadding(0, dp(2), 0, dp(8));
++            p.addView(h);
++
++            ScrollView sv = new ScrollView(this);
++            sv.setVerticalScrollBarEnabled(false);
++            LinearLayout list = new LinearLayout(this);
++            list.setOrientation(LinearLayout.VERTICAL);
++            sv.addView(list, new FrameLayout.LayoutParams(-1, -2));
++            p.addView(sv, new LinearLayout.LayoutParams(-1, 0, 1f));
++
++            for (Item it : columns.get(c)) {
++                TextView tv = text(it.label.get(), 13, 0xFFE6DCF5, false);
++                tv.setGravity(Gravity.CENTER);
++                tv.setPadding(dp(6), dp(8), dp(6), dp(8));
++                tv.setFocusable(true);
++                tv.setClickable(true);
++                tv.setBackground(selectable());
++                tv.setOnClickListener(v -> {
++                    if (it.action != null) it.action.run();
++                    refreshLabels();
++                });
++                LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(-1, -2);
++                ilp.setMargins(0, dp(2), 0, dp(2));
++                list.addView(tv, ilp);
++                it.view = tv;
++                if (first == null) first = it;
++            }
++        }
++
++        TextView hint = text("Cruceta: moverse · OK / A: elegir · Atrás / B: volver", 12, 0xFFBBAADD, false);
++        hint.setGravity(Gravity.CENTER);
++        FrameLayout.LayoutParams hlp = new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM);
++        hlp.bottomMargin = dp(6);
++        root.addView(hint, hlp);
++
++        setContentView(root);
++        if (first != null) first.view.requestFocus();
++    }
++
++    @Override
++    protected void onResume() {
++        super.onResume();
++        refreshLabels();
++    }
++
++    private void refreshLabels() {
++        for (List<Item> col : columns) for (Item it : col) if (it.view != null) it.view.setText(it.label.get());
++    }
++
++    @Override
++    public void onBackPressed() {
++        if (overlay != null) closeOverlay();
++        else super.onBackPressed();
++    }
++
++    // ------------------------------------------------------------ boxes on top
++
++    private LinearLayout openPanel(String title) {
++        focusBeforeOverlay = getCurrentFocus();
++        columnsRow.setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);
++        overlay = new FrameLayout(this);
++        overlay.setBackgroundColor(0x99000000);
++        overlay.setClickable(true);
++        LinearLayout box = new LinearLayout(this);
++        box.setOrientation(LinearLayout.VERTICAL);
++        box.setBackground(glass(0xEE1A1030, 0xFFB48CFF, 22, 2));
++        box.setPadding(dp(22), dp(16), dp(22), dp(14));
++        TextView t = text(title, 18, 0xFFEBD7FF, true);
++        t.setGravity(Gravity.CENTER);
++        t.setPadding(0, 0, 0, dp(10));
++        box.addView(t);
++        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(dp(560), -2, Gravity.CENTER);
++        lp.setMargins(0, dp(24), 0, dp(24));
++        overlay.addView(box, lp);
++        root.addView(overlay, new FrameLayout.LayoutParams(-1, -1));
++        return box;
++    }
++
++    private TextView backButton(LinearLayout box) {
++        TextView back = text("Volver", 14, 0xFFFFFFFF, true);
++        back.setGravity(Gravity.CENTER);
++        back.setPadding(dp(14), dp(9), dp(14), dp(9));
++        back.setFocusable(true);
++        back.setClickable(true);
++        StateListDrawable s = new StateListDrawable();
++        s.addState(new int[]{android.R.attr.state_focused}, glass(0x66AA78FF, 0xCCE0C8FF, 12, 2));
++        s.addState(new int[]{}, glass(0x22986FF2, 0x55C8A0FF, 12, 1));
++        back.setBackground(s);
++        back.setOnClickListener(v -> closeOverlay());
++        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
++        lp.topMargin = dp(10);
++        box.addView(back, lp);
++        return back;
++    }
++
++    private void openBox(String title, Setting[] list, String note) {
++        LinearLayout box = openPanel(title);
++        ScrollView sv = new ScrollView(this);
++        LinearLayout rows = new LinearLayout(this);
++        rows.setOrientation(LinearLayout.VERTICAL);
++        sv.addView(rows, new FrameLayout.LayoutParams(-1, -2));
++        TextView firstRow = null;
++        for (Setting st : list) {
++            TextView r = text("", 14, 0xFFE6DCF5, false);
++            r.setPadding(dp(14), dp(9), dp(14), dp(9));
++            r.setFocusable(true);
++            r.setClickable(true);
++            StateListDrawable s = new StateListDrawable();
++            s.addState(new int[]{android.R.attr.state_focused}, glass(0x66AA78FF, 0xCCE0C8FF, 12, 2));
++            s.addState(new int[]{}, glass(0x22986FF2, 0x33C8A0FF, 12, 1));
++            r.setBackground(s);
++            Runnable show = () -> r.setText(st.title() + ":   " + (r.isFocused() ? "◀  " : "") + st.value() + (r.isFocused() ? "  ▶" : ""));
++            show.run();
++            r.setOnFocusChangeListener((v, f) -> show.run());
++            r.setOnClickListener(v -> { st.change(1); show.run(); });
++            r.setOnKeyListener((v, keyCode, e) -> {
++                if (e.getAction() != KeyEvent.ACTION_DOWN) return false;
++                if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) { st.change(-1); show.run(); return true; }
++                if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) { st.change(1); show.run(); return true; }
++                return false;
++            });
++            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
++            lp.setMargins(0, dp(3), 0, dp(3));
++            rows.addView(r, lp);
++            if (firstRow == null) firstRow = r;
++        }
++        // long lists (button editor) scroll; short ones take their natural height
++        LinearLayout.LayoutParams svlp = list.length > 7
++                ? new LinearLayout.LayoutParams(-1, dp(300)) : new LinearLayout.LayoutParams(-1, -2);
++        box.addView(sv, svlp);
++        TextView hint = text("Cruceta ↑↓: elegir · ◀ ▶: cambiar · Atrás / B: volver\n" + note, 12, 0xFFBBAADD, false);
++        hint.setGravity(Gravity.CENTER);
++        hint.setPadding(0, dp(10), 0, 0);
++        box.addView(hint);
++        backButton(box);
++        if (firstRow != null) firstRow.requestFocus();
++    }
++
++    @SuppressWarnings("deprecation")
++    private void openText(String title, String html) {
++        LinearLayout box = openPanel(title);
++        ScrollView sv = new ScrollView(this);
++        TextView body = text("", 13, 0xFFE6DCF5, false);
++        body.setText(android.text.Html.fromHtml(html));
++        body.setLineSpacing(dp(2), 1f);
++        sv.addView(body, new FrameLayout.LayoutParams(-1, -2));
++        sv.setFocusable(true);     // the remote's up/down scroll the text; at the end, down goes to "Volver"
++        box.addView(sv, new LinearLayout.LayoutParams(-1, dp(320)));
++        backButton(box);
++        sv.requestFocus();
++    }
++
++    private void closeOverlay() {
++        if (overlay == null) return;
++        root.removeView(overlay);
++        overlay = null;
++        columnsRow.setDescendantFocusability(ViewGroup.FOCUS_AFTER_DESCENDANTS);
++        refreshLabels();
++        if (focusBeforeOverlay != null) focusBeforeOverlay.requestFocus();
++    }
++}
 diff --git a/app/src/main/java/com/limelight/Game.java b/app/src/main/java/com/limelight/Game.java
-index a707937..4413cd6 100755
+index a707937..01334d8 100755
 --- a/app/src/main/java/com/limelight/Game.java
 +++ b/app/src/main/java/com/limelight/Game.java
 @@ -185,6 +185,8 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
@@ -1050,16 +1636,18 @@ index a707937..4413cd6 100755
          // Pass-through virtual navigation keys
          if ((event.getFlags() & KeyEvent.FLAG_VIRTUAL_HARD_KEY) != 0) {
              return false;
-@@ -3682,6 +3703,8 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
+@@ -3682,6 +3703,10 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
                      spinner.dismiss();
                      spinner = null;
                  }
 +                com.limelight.utils.CarolinaAudio.hideLoadingBackground(carolinaLoadingView);
 +                carolinaLoadingView = null;
++                // Turri's greeting: only now that the stream really started
++                com.limelight.utils.CarolinaAudio.onStreamStarted(Game.this);
  
                  connected = true;
                  connecting = false;
-@@ -4207,6 +4230,10 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
+@@ -4207,6 +4232,10 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
          updateZoomButtonAppearance();
      }
  
@@ -1070,7 +1658,7 @@ index a707937..4413cd6 100755
      public void toggleHUD() {
          prefConfig.enablePerfOverlay = !prefConfig.enablePerfOverlay;
          if (prefConfig.enablePerfOverlay) {
-@@ -4226,6 +4253,43 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
+@@ -4226,6 +4255,43 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
          prefConfig.enableTouchSensitivity = !prefConfig.enableTouchSensitivity;
      }
  
@@ -1114,7 +1702,7 @@ index a707937..4413cd6 100755
      public void disconnect() {
          if (prefConfig.smartClipboardSync) {
              getClipboard(-1);
-@@ -4260,13 +4324,28 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
+@@ -4260,13 +4326,28 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
      public void showGameMenu(GameInputDevice device) {
          if(isOnExternalDisplay()) {
              ExternalDisplayControlActivity.toggleGameMenu();
@@ -1167,7 +1755,7 @@ index 63f3532..8016e68 100755
                  () -> game.sendClipboard(true)));
  
 diff --git a/app/src/main/java/com/limelight/PcView.java b/app/src/main/java/com/limelight/PcView.java
-index de8f490..0a27917 100755
+index de8f490..59b2bc3 100755
 --- a/app/src/main/java/com/limelight/PcView.java
 +++ b/app/src/main/java/com/limelight/PcView.java
 @@ -139,6 +139,7 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
@@ -1178,7 +1766,33 @@ index de8f490..0a27917 100755
  
          UiHelper.notifyNewRootView(this);
  
-@@ -378,11 +379,13 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
+@@ -162,9 +163,24 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
+         settingsButton.setOnClickListener(new OnClickListener() {
+             @Override
+             public void onClick(View v) {
+-                startActivity(new Intent(PcView.this, StreamSettings.class));
++                // Carolina: the gear opens Carolina's own settings screen (the old list stays inside it)
++                startActivity(new Intent(PcView.this, CarolinaSettings.class));
+             }
+         });
++        // Carolina: golden gear (Turri's colour), with a golden frame when selected
++        settingsButton.setColorFilter(0xFFFBB71B, android.graphics.PorterDuff.Mode.SRC_IN);
++        {
++            android.graphics.drawable.GradientDrawable on = new android.graphics.drawable.GradientDrawable();
++            on.setColor(0x2EFBB71B);
++            on.setCornerRadius(28);
++            on.setStroke(4, 0xFFFFE7B0);
++            android.graphics.drawable.StateListDrawable sel = new android.graphics.drawable.StateListDrawable();
++            sel.addState(new int[]{android.R.attr.state_focused}, on);
++            sel.addState(new int[]{android.R.attr.state_pressed}, on);
++            sel.addState(new int[]{}, new android.graphics.drawable.ColorDrawable(0x00000000));
++            settingsButton.setBackground(sel);
++            settingsButton.setElevation(6f);
++        }
+         addComputerButton.setOnClickListener(new OnClickListener() {
+             @Override
+             public void onClick(View v) {
+@@ -378,11 +394,13 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
  
          inForeground = true;
          startComputerUpdates();
@@ -2644,10 +3258,10 @@ index 5b2d20d..b9825ac 100755
      public void onBackPressed() {
 diff --git a/app/src/main/java/com/limelight/utils/CarolinaAudio.java b/app/src/main/java/com/limelight/utils/CarolinaAudio.java
 new file mode 100644
-index 0000000..1ca4d8b
+index 0000000..bc9b2a0
 --- /dev/null
 +++ b/app/src/main/java/com/limelight/utils/CarolinaAudio.java
-@@ -0,0 +1,436 @@
+@@ -0,0 +1,469 @@
 +package com.limelight.utils;
 +
 +import android.app.Activity;
@@ -2694,7 +3308,6 @@ index 0000000..1ca4d8b
 +    private static MediaPlayer music;
 +    private static int track = 0;
 +    private static int homeScreensVisible = 0;
-+    private static boolean greetedThisLaunch = false;
 +
 +    private CarolinaAudio() {
 +    }
@@ -2731,11 +3344,44 @@ index 0000000..1ca4d8b
 +        }
 +    }
 +
-+    /** A stream is starting (Escritorio, Steam, ...): stop music, play the short sound. */
++    /** A stream is being started (Escritorio, Steam, ...): pause the music. No sound yet. */
 +    public static void onAppLaunch(Context c) {
 +        pauseMusic();
++    }
++
++    /** Turri's greeting: the stream really started (the picture of the PC is on screen). */
++    public static void onStreamStarted(Context c) {
 +        if (isGreetingOn(c)) {
 +            playOnce(c, R.raw.carolina_abrir_app);
++        }
++    }
++
++    // ------------------------------------------------------------ settings (used by the settings screen)
++
++    public static void setGreetingOn(Context c, boolean on) {
++        prefs(c).edit().putBoolean(KEY_GREETING, on).apply();
++    }
++
++    public static void setMusicOn(Context c, boolean on) {
++        prefs(c).edit().putBoolean(KEY_MUSIC, on).apply();
++        if (on) {
++            if (music == null) startTrack(c);
++            else music.start();
++        } else {
++            pauseMusic();
++        }
++        refreshPlayer();
++    }
++
++    public static int getVolumePercent(Context c) {
++        return prefs(c).getInt(KEY_VOLUME, DEFAULT_VOLUME);
++    }
++
++    public static void setVolumePercent(Context c, int p) {
++        prefs(c).edit().putInt(KEY_VOLUME, Math.max(0, Math.min(100, p))).apply();
++        if (music != null) {
++            float v = volume(c) * 0.85f;
++            music.setVolume(v, v);
 +        }
 +    }
 +
@@ -2789,41 +3435,42 @@ index 0000000..1ca4d8b
 +        homeScreensVisible++;
 +        Runnable r = playerRefreshByScreen.get(a);
 +        if (r != null) { playerRefresh = r; r.run(); }
-+        if (!greetedThisLaunch) {
-+            greetedThisLaunch = true;
-+            track = prefs(a).getInt(KEY_TRACK, 0) % PLAYLIST.length;
-+            if (isGreetingOn(a)) {
-+                playGreetingThenMusic(a);
-+                return;
-+            }
-+        }
-+        if (greetingPlaying) return; // music starts when the greeting ends
++        if (greetingPlaying) return; // the music continues when the greeting ends
 +        if (isMusicOn(a)) {
-+            if (music == null) startTrack(a);
-+            else if (!music.isPlaying()) music.start();
++            if (music == null) {
++                track = prefs(a).getInt(KEY_TRACK, 0) % PLAYLIST.length;
++                startTrack(a);
++            } else if (!music.isPlaying()) music.start();
 +        }
 +    }
 +
-+    /** Greeting (first 5 s of "Mi luz y mi guía") softly, then the background music. */
-+    private static void playGreetingThenMusic(Activity a) {
++    /**
++     * Carolina's greeting: the PC answered and its list (Escritorio, Steam, games) is open.
++     * Also after Wake-on-LAN, once the PC is really on. Never when the connection fails.
++     */
++    public static void onPcConnected(Activity a) {
++        if (!isGreetingOn(a) || greetingPlaying) return;
 +        final Context app = a.getApplicationContext();
 +        try {
 +            MediaPlayer mp = MediaPlayer.create(app, R.raw.carolina_inicio);
-+            if (mp == null) throw new IllegalStateException("no greeting");
++            if (mp == null) return;
++            final boolean wasPlaying = music != null && music.isPlaying();
++            if (wasPlaying) music.pause();             // the greeting sounds alone
 +            greetingPlaying = true;
 +            mp.setVolume(volume(app), volume(app));
 +            mp.setOnCompletionListener(p -> {
 +                p.release();
 +                greetingPlaying = false;
-+                // continue with the other song, so "Mi luz y mi guía" does not start again right away
-+                track = prefs(app).getInt(KEY_TRACK, 1);
-+                if (homeScreensVisible > 0 && isMusicOn(app) && music == null) startTrack(app);
++                if (homeScreensVisible > 0 && isMusicOn(app)) {
++                    if (music != null) music.start();  // continue the song where it was
++                    else startTrack(app);
++                }
++                refreshPlayer();
 +            });
 +            mp.start();
 +        } catch (Exception e) {
 +            LimeLog.warning("CarolinaAudio greeting: " + e);
 +            greetingPlaying = false;
-+            if (isMusicOn(app) && music == null) startTrack(app);
 +        }
 +    }
 +
